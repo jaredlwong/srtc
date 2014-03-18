@@ -86,6 +86,13 @@ function createChatChannel() {
 		content.append(chat_window);
 		content.append(chat_form);
 	};
+
+	chatpc.onaddstream = function(e) {
+		console.log("fired onaddstream");
+		console.log(JSON.stringify(e.stream));
+		$("video")[0].src = window.webkitURL.createObjectURL(e.stream);
+		$("video")[0].play();
+	};
 }
 
 // caller: step 1
@@ -97,7 +104,14 @@ chat_start_button.click(function() {
 	// must set up data channel before starting call, otherwise ice will
 	// get confused
 	createChatChannel();
+
+	navigator.webkitGetUserMedia({audio:true, video:true}, function(stream) {
+		chatpc.addStream(stream);
+		console.log("added my stream");
+	console.log("initiating call");
 	chatpc.initiateCall();
+	}, function(e) {console.log(e);});
+
 
 	$(chatpc).on("candidates", function() {
 		console.log("setting caller val");
@@ -121,7 +135,16 @@ chat_caller.on("input", function() {
 	// must set up data channel before starting call, otherwise ice will
 	// get confused
 	createChatChannel();
+
+	navigator.webkitGetUserMedia({audio:true, video:true}, function(stream) {
+		chatpc.addStream(stream);
+		console.log("added my stream");
+	console.log("receiving call");
 	chatpc.receiveCall(callerSdp);
+	for (var i = 0; i < callerCandidates.length; ++i) {
+		chatpc.addIceCandidate(new RTCIceCandidate(callerCandidates[i]));
+	}
+	}, function(e) {console.log(e);});
 
 	$(chatpc).on("candidates", function() {
 		console.log("setting caller val");
@@ -132,9 +155,6 @@ chat_caller.on("input", function() {
 		chat_callee.val(JSON.stringify(sdpAndCandidates));
 	});
 
-	for (var i = 0; i < callerCandidates.length; ++i) {
-		chatpc.addIceCandidate(new RTCIceCandidate(callerCandidates[i]));
-	}
 });
 
 // caller: step 3
