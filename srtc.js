@@ -1,180 +1,140 @@
-requirejs.config({
-"paths": {
-	"jquery": "http://ajax.googleapis.com/ajax/libs/jquery/2.0.0/jquery.min"
-}
-});
+define(["pc"], function(_pc) {
 
-requirejs(["jquery"], function($) {
-$(document).ready(function() {
+var comm_media = $(
+	"<form><ul>" +
+	"<li><input type='checkbox'>chat</li>" +
+	"<li><input type='checkbox'>audio</li>" +
+	"<li><input type='checkbox'>video</li>" +
+	"<li><input type='submit'></li>" +
+	"</ul></form>"
+);
 
-var content = $($("#content")[0]);
+var start_button = $("<button id='start_button'>Start!</button>");
+var caller_sdp = $("<input>", { type: "text", id: "caller_sdp" });
+var callee_sdp = $("<input>", { type: "text", id: "callee_sdp" });
 
-
-function PeerConnection() {
-	var pc = new webkitRTCPeerConnection({
-		iceServers: [{
-			url: 'stun:stun.l.google.com:19302'
-		}]
-	}, {
-		optional: [{
-			RtpDataChannels: true
-		}]
-	});
-
-
-	pc.onsignalingstatechange = function() {
-		console.log("signalingstatechange: " + chatpc.signalingState);
-	};
-
-	pc.oniceconnectionstatechange = function() {
-		console.log("iceconnectionstatechange: " + chatpc.iceConnectionState);
-	};
-
-	pc.candidates = [];
-	pc.onicecandidate = function(e) {
-		if (e && e.candidate) {
-			pc.candidates.push(e.candidate);
-		} else {
-			$(pc).trigger("candidates");
-		}
-	};
-
-	pc.initiateCall = function() {
-		pc.createOffer(function(sdp) {
-			pc.setLocalDescription(sdp);
-		});
-		return pc.localDescription;
-	};
-
-	pc.receiveCall = function(callerSdp) {
-		pc.setRemoteDescription(new RTCSessionDescription(callerSdp));
-		pc.createAnswer(function(sdp) {
-			pc.setLocalDescription(sdp);
-		});
-		return pc.localDescription;
-	};
-
-	return pc;
-}
-
-var chatpc, chatchan;
-var chat_start_button = $("<button id='chat_start_button'>Start a chat!</button>");
-var chat_caller = $("<input>", { type: "text", id: "chat_caller" });
-var chat_callee = $("<input>", { type: "text", id: "chat_callee" });
 var chat_window = $("<div>", { id: "chat_window"});
 var chat_form   = $("<form>", { id: "chat_form" });
 var chat_input  = $("<input>", { type: "text", id: "chat_input" });
-var chat_enter_button = $("<button id='chat_enter_button'>Enter</button>");
-chat_form.append(chat_input, chat_enter_button);
+var chat_enter = $("<button id='chat_enter'>Enter</button>");
+chat_form.append(chat_input, chat_enter);
 
-function createChatChannel() {
-	chatchan = chatpc.createDataChannel("chat_channel", {});
+var video_window = $("<video>");
 
-	chat_form.submit(function() {
-		var text = chat_input.val();
-		chat_window.append($("<p>").html(text));
-		chatchan.send(text);
-		return false;
+/*****************************************************************************/
+
+var pc = _pc.MakePC(_pc.Dconf, _pc.Dopts);
+
+/*****************************************************************************/
+
+// on start button click, start call and display sd
+start_button.click(function() {
+	_pc.PCStartCall(pc, function(sd) {
+		caller_sdp.val(JSON.stringify(sd));
 	});
-	
-	chatchan.onmessage = function(e) {
-		chat_window.append($("<p>").html(e.data));
-		console.log(e.data);
-	};
-	
-	chatchan.onopen = function() {
-		content.append(chat_window);
-		content.append(chat_form);
-	};
+});
 
-	chatpc.onaddstream = function(e) {
-		console.log("fired onaddstream");
-		console.log(JSON.stringify(e.stream));
-		$("video")[0].src = window.webkitURL.createObjectURL(e.stream);
-		$("video")[0].play();
-	};
+// if user inputs caller sdp
+caller_sdp.on("input", function() {
+	// receive sd
+	var rsd = JSON.parse(caller_sdp.val());
+	_pc.PCRespondCall(pc, rsd, function(sd) {
+		// display sd
+		callee_sdp.val(JSON.stringify(sd));
+	});
+});
+
+// if user inputs callee sdp
+callee_sdp.on("input", function() {
+	var rsd = JSON.parse(callee_sdp.val());
+	_pc.PCEstablishCall(pc, rsd);
+});
+
+/*****************************************************************************/
+
+function connectMedia(isChat, isAudio, isVideo, callbackFunc) {
+	var content = $($("#content")[0]);
+	if (isChat) {
+		// add data channel to peer connection
+		var dc = pc.rtcpc.createDataChannel("dc", {});
+	
+		chat_form.submit(function() {
+			var text = chat_input.val();
+			chat_window.append($("<p>").html(text));
+			dc.send(text);
+			return false;
+		});
+
+		dc.onmessage = function(e) {
+			chat_window.append($("<p>").html(e.data));
+		};
+
+		dc.onopen = function() {
+			content.append(chat_window);
+			content.append(chat_form);
+		};
+	}
+
+	if (isAudio || isVideo) {
+		pc.rtcpc.onaddstream = function(e) {
+			content.append(video_window);
+			var url = (window.URL || window.webkitURL);
+			$("video")[0].src = url.createObjectURL(e.stream);
+			$("video")[0].play();
+		};
+
+		// add audio and video to peer connection
+		navigator.getMedia = (
+			navigator.getUserMedia ||
+			navigator.webkitGetUserMedia ||
+			navigator.mozGetUserMedia ||
+			navigator.msGetUserMedia
+		);
+		navigator.getMedia(
+			{audio: isAudio, video: isVideo},
+			function(stream) {
+				pc.rtcpc.addStream(stream);
+
+				console.log(stream.getVideoTracks());
+				console.log(stream);
+
+
+				callbackFunc();
+			},
+			function(e) {
+				console.log(e);
+			}
+		);
+	} else {
+		callbackFunc();
+	}
 }
 
-// caller: step 1
-// when chat_start_button is clicked, create caller's sdp
-chat_start_button.click(function() {
-	console.log("step 1");
-	chatpc = PeerConnection(null);
+// main
+$(document).ready(function() {
+	var content = $($("#content")[0]);
+	content.append(comm_media);
 
-	// must set up data channel before starting call, otherwise ice will
-	// get confused
-	createChatChannel();
+	var isChat = false;
+	var isAudio = false;
+	var isVideo = false;
 
-	navigator.webkitGetUserMedia({audio:true, video:true}, function(stream) {
-		chatpc.addStream(stream);
-		console.log("added my stream");
-	console.log("initiating call");
-	chatpc.initiateCall();
-	}, function(e) {console.log(e);});
+	comm_media.submit(function() {
+		isChat = comm_media.find("input")[0].checked;
+		isAudio = comm_media.find("input")[1].checked;
+		isVideo = comm_media.find("input")[2].checked;
+		if (!isChat && !isAudio && !isVideo) {
+			alert("You must select at least one of chat, audio, or video.");
+			return false;
+		}
 
-
-	$(chatpc).on("candidates", function() {
-		console.log("setting caller val");
-		var sdpAndCandidates = {
-			sdp: chatpc.localDescription,
-			candidates: chatpc.candidates
-		};
-		chat_caller.val(JSON.stringify(sdpAndCandidates));
+		connectMedia(isChat, isAudio, isVideo, function() {
+			content.append(start_button);
+			content.append(caller_sdp);
+			content.append(callee_sdp);
+		});
+		return false;
 	});
 });
 
-// callee: step 2
-// when user inputs caller's sdp, create callee's sdp
-chat_caller.on("input", function() {
-	console.log("step 2");
-	var callerSdpAndCandidates = JSON.parse(chat_caller.val());
-	var callerSdp = callerSdpAndCandidates.sdp;
-	var callerCandidates = callerSdpAndCandidates.candidates;
-
-	chatpc = PeerConnection(null);
-	// must set up data channel before starting call, otherwise ice will
-	// get confused
-	createChatChannel();
-
-	navigator.webkitGetUserMedia({audio:true, video:true}, function(stream) {
-		chatpc.addStream(stream);
-		console.log("added my stream");
-	console.log("receiving call");
-	chatpc.receiveCall(callerSdp);
-	for (var i = 0; i < callerCandidates.length; ++i) {
-		chatpc.addIceCandidate(new RTCIceCandidate(callerCandidates[i]));
-	}
-	}, function(e) {console.log(e);});
-
-	$(chatpc).on("candidates", function() {
-		console.log("setting caller val");
-		var sdpAndCandidates = {
-			sdp: chatpc.localDescription,
-			candidates: chatpc.candidates
-		};
-		chat_callee.val(JSON.stringify(sdpAndCandidates));
-	});
-
-});
-
-// caller: step 3
-// when user inputs callee's sdp, set caller's remote sdp
-chat_callee.on("input", function() {
-	console.log("step 3");
-	var calleeSdpAndCandidates = JSON.parse(chat_callee.val());
-	var calleeSdp = calleeSdpAndCandidates.sdp;
-	var calleeCandidates = calleeSdpAndCandidates.candidates;
-
-	chatpc.setRemoteDescription(new RTCSessionDescription(calleeSdp));
-
-	for (var i = 0; i < calleeCandidates.length; ++i) {
-		chatpc.addIceCandidate(new RTCIceCandidate(calleeCandidates[i]));
-	}
-});
-
-content.append(chat_start_button);
-content.append(chat_caller);
-content.append(chat_callee);
-
-}); // jquery
-}); // requirejs
+return {}});

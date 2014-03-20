@@ -1,7 +1,8 @@
 <!doctype html>
 <html>
 	<head>
-		<script data-main="srtc" src="http://requirejs.org/docs/release/2.1.11/minified/require.js"></script>
+		<script src="/jquery-2.1.0.min.js"></script>
+		<script data-main="srtc" src="/require.js"></script>
 	</head>
 	<body>
 		<h1>Standalone WebRTC</h1>
@@ -22,7 +23,58 @@
 		and data communciation (such as instant messaging and file
 		sharing).
 		</p>
+		<p>
+		Down below is a simple example showing how WebRTC can operate
+		without a central server (kindof, still need to the ice
+		servers). You can do text, audio and video communication.
+		</p>
+		<h2>Browsers</h2>
+		<p>
+		Chrome is the only browser I've gotten to work. Partly it is
+		due to a hack I rely on for getting ice candidates (I wait for
+		a null ice candidate, which is not in the spec, it's just what
+		chrome happens to do).
+		</p>
+		<h2>Steps</h2>
+		<ol>
+			<li>Contact a friend. Tell them to go to this webpage.</li>
+			<li>Decide on the same set of communications.</li>
+			<li>One person should press "Start"</li>
+			<li>The person who pressed "Start" should send the text
+			that will be generated in the first box to the other
+			person. This could be through email.</li>
+			<li>The other person should input the text from the
+			person who pressed "Start" into the first box.</li>
+			<li>The other person will get some generated text in
+			the second box.</li>
+			<li>The other person should send that text to the
+			person who pressed "Start".</li>
+			<li>The person who pressed "Start" should put the text
+			from the other person's second box into his own second
+			box.</li>
+			<li>In the end, both people will have the same text in
+			each box</li>
+			<li>Now communicate!</li>
+		</ol>
+		<h2>Code</h2>
+		<p>
+		If you are interested you can find the code
+		<a href="srtc.js">here</a> and <a href="pc.js">here</a>.
+		Note that communications are going through a single server that
+		is in charge of routing. That would be the ice servers, in
+		particular, stun:stun.l.google.com:19302.
+		</p>
+		<p>
+		But the ice servers just do the simple routing, setting up the
+		NATs in between. They do not see any relevant information about
+		the two parties involved beyond their IP addresses.
+		</p>
+		<p>
+		Notably, this is still a minor security vulnerability.
+		Otherwise data is communicated directly between the parties
+		with 128-bit AES.
+		</p>
+		<h2>WebRTC!</h2>
 		<div id="content"></div>
 	</body>
-	<video autoplay></video>
 </html>
